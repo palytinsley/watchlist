@@ -66,11 +66,32 @@
       const json = await res.json();
       if (!json.ok) throw new Error(json.error || 'Server error');
 
-      // Preserve device-local settings that should never be overwritten by a pull
-      const localGasUrl = window.Store.getSettings().gasUrl;
-      window.Store.importJSON(JSON.stringify(json.data));
-      if (localGasUrl) window.Store.setSetting('gasUrl', localGasUrl);
+      const remote = json.data || {};
+      const remoteItems = remote.items || {};
+      const remoteLists = remote.lists || [];
 
+      // If sheet is empty, don't wipe local data
+      if (!Object.keys(remoteItems).length && !remoteLists.length) {
+        _set('synced');
+        return { ok: true };
+      }
+
+      // Merge: remote is the base, local wins for any key that exists in both
+      const local = JSON.parse(window.Store.exportJSON());
+      const mergedItems = Object.assign({}, remoteItems, local.items || {});
+      const remoteListIds = new Set(remoteLists.map(l => l.id));
+      const mergedLists = [
+        ...remoteLists.filter(l => !(local.lists || []).some(ll => ll.id === l.id)),
+        ...(local.lists || []),
+      ];
+      const merged = {
+        settings: Object.assign({}, remote.settings || {}, local.settings || {}),
+        lists: mergedLists,
+        items: mergedItems,
+        recent: local.recent && local.recent.length ? local.recent : (remote.recent || []),
+      };
+
+      window.Store.importJSON(JSON.stringify(merged));
       _set('synced');
       return { ok: true };
     } catch (e) {
