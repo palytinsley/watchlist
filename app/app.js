@@ -550,13 +550,9 @@
     const masked = usingDefault ? 'Using built-in demo key' : '•••• •••• ' + st.apiKey.slice(-4);
 
     const SS = window.SheetsSync;
-    const gasUrl = st.gasUrl || '';
     const syncStatus    = SS ? SS.getStatus()        : 'local';
     const syncLabel     = SS ? SS.getStatusLabel()   : 'Local only';
     const syncDotColor  = SS ? SS.getStatusDotColor(): '#8a8a96';
-    const gasUrlDisplay = gasUrl
-      ? (gasUrl.length > 32 ? '…' + gasUrl.slice(-30) : gasUrl)
-      : 'Not configured';
 
     return `
       <div class="view">
@@ -600,17 +596,9 @@
         <div class="label">Google Sheets</div>
         <div class="setgroup">
           <div class="setrow">
-            <div>
-              <div class="setrow__l">Sync status</div>
-              <div class="setrow__r" style="margin-top:3px;font-family:var(--mono);font-size:11px;word-break:break-all">${U.esc(gasUrlDisplay)}</div>
-            </div>
+            <div class="setrow__l">Sync status</div>
             <div class="setrow__r" style="white-space:nowrap"><span class="statusdot" style="background:${syncDotColor}"></span> ${U.esc(syncLabel)}</div>
           </div>
-          <div class="setrow setrow--btn" data-action="edit-gas-url">
-            <div class="setrow__l">${gasUrl ? 'Change web app URL' : 'Set web app URL'}</div>
-            <div class="setrow__r">${U.ti('chevron-right')}</div>
-          </div>
-          ${gasUrl ? `
           <div class="setrow setrow--btn" data-action="test-sheets">
             <div class="setrow__l">Test connection</div>
             <div class="setrow__r">${U.ti('wifi')}</div>
@@ -622,9 +610,8 @@
           <div class="setrow setrow--btn" data-action="push-sheets">
             <div class="setrow__l">Push local data to Sheets</div>
             <div class="setrow__r">${U.ti('cloud-upload')}</div>
-          </div>` : ''}
+          </div>
         </div>
-        <div class="safe" style="margin-top:8px"><div class="muted" style="font-size:12px;line-height:1.5">Paste your deployed Google Apps Script web app URL to enable sync. Data stays in localStorage; Sheets is an optional backup.</div></div>
 
         <div class="label">Data</div>
         <div class="setgroup">
@@ -633,7 +620,7 @@
           <div class="setrow setrow--btn setrow--danger" data-action="clear-data"><div class="setrow__l">Clear all data</div><div class="setrow__r">${U.ti('chevron-right')}</div></div>
         </div>
 
-        <div class="appfoot">Watchlist · ${gasUrl ? U.esc(syncLabel) : 'local only'}<br>${S.allItems().length} titles · ${S.getLists().length} lists</div>
+        <div class="appfoot">Watchlist · ${U.esc(syncLabel)}<br>${S.allItems().length} titles · ${S.getLists().length} lists</div>
       </div>`;
   }
 
@@ -707,10 +694,6 @@
       case 'import-data': importData(); break;
       case 'clear-data': confirmClear(); break;
       case 'do-clear': S.clearAll(); U.closeSheet(); setTab('home'); U.toast('All data cleared', 'check'); break;
-      case 'edit-gas-url': openGasUrlSheet(); break;
-      case 'save-gas-url': saveGasUrl(); break;
-      case 'test-gas-inline': testGasInline(); break;
-      case 'clear-gas-url': S.setSetting('gasUrl', ''); U.closeSheet(); render(); U.toast('Sheets URL removed', 'check'); break;
       case 'test-sheets': testSheets(); break;
       case 'pull-sheets': pullSheets(); break;
       case 'push-sheets': pushSheets(); break;
@@ -760,34 +743,10 @@
   }
 
   // ── Google Sheets sync ─────────────────────────────────────────────────
-  function openGasUrlSheet() {
-    const current = S.getSettings().gasUrl || '';
-    const html = `
-      <div class="sheet__title">Google Apps Script URL</div>
-      <div class="detail__overview" style="margin-top:8px;font-size:13.5px">Paste the web app URL from your deployed Apps Script. Stored only on this device — never synced to the sheet.</div>
-      <div class="field">
-        <input type="url" id="gas-url-input" class="input--mono input" placeholder="https://script.google.com/macros/s/…/exec" value="${U.esc(current)}">
-      </div>
-      <div id="gas-url-status" class="muted" style="font-size:12.5px;margin-top:8px;min-height:16px"></div>
-      <div style="display:flex;gap:10px;margin-top:14px">
-        <button class="btn" data-action="test-gas-inline">Test</button>
-        <button class="btn btn--primary btn--full" data-action="save-gas-url">Save URL</button>
-      </div>
-      ${current ? '<div style="margin-top:14px"><button class="btn btn--ghost btn--sm" data-action="clear-gas-url">Remove URL</button></div>' : ''}`;
-    U.openSheet(html, () => setTimeout(() => { const i = document.getElementById('gas-url-input'); if (i) i.focus(); }, 150));
-  }
-
-  function saveGasUrl() {
-    const v = (document.getElementById('gas-url-input').value || '').trim();
-    if (!v) { U.toast('Paste a URL first', 'alert-circle'); return; }
-    S.setSetting('gasUrl', v);
-    U.closeSheet(); render(); U.toast('URL saved', 'check');
-  }
 
   async function testGasInline() {
-    const v = (document.getElementById('gas-url-input').value || '').trim();
     const st = document.getElementById('gas-url-status');
-    if (!v) { st.textContent = 'Paste a URL to test.'; return; }
+    if (!st) return;
     st.textContent = 'Testing…';
     try {
       const res = await fetch(v + '?action=getDatabase', { cache: 'no-store' });
@@ -882,8 +841,8 @@
     const st = S.getSettings();
     document.documentElement.setAttribute('data-theme', st.theme || 'dark');
     render();
-    // Background pull on startup if a Sheets URL is configured
-    if (st.gasUrl && window.SheetsSync) {
+    // Background pull on startup
+    if (window.SheetsSync) {
       window.SheetsSync.pull().then(result => {
         if (result.ok) { render(); U.toast('Synced from Sheets', 'check'); }
       }).catch(() => {});
