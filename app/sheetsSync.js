@@ -35,8 +35,10 @@
 
   function onStatusChange(fn) { subs.add(fn); return () => subs.delete(fn); }
 
+  const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbxk2ySezvns1qwzUfKtThwPfdWGXhql8l4WRJpaYZnt6zYmXao8Ld7y9v0YiEHoP_mhIw/exec';
+
   function gasUrl() {
-    return (window.Store.getSettings().gasUrl || '').trim();
+    return (window.Store.getSettings().gasUrl || DEFAULT_GAS_URL).trim();
   }
 
   // ── public API ─────────────────────────────────────────────────────────
@@ -83,15 +85,23 @@
     _set('syncing');
     try {
       const data = JSON.parse(window.Store.exportJSON());
-      // text/plain avoids CORS preflight; GAS reads body via e.postData.contents
-      const res = await fetch(url, {
+      // GAS POST redirects strip CORS headers, so use no-cors (fire-and-forget).
+      // We verify success with a follow-up GET and compare updatedAt timestamps.
+      const sentAt = Date.now();
+      await fetch(url, {
         method: 'POST',
+        mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'saveDatabase', data }),
       });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const json = await res.json();
+      // Confirm the write landed by reading back updatedAt from the sheet.
+      const check = await fetch(url + '?action=getDatabase', { cache: 'no-store' });
+      if (!check.ok) throw new Error('HTTP ' + check.status);
+      const json = await check.json();
       if (!json.ok) throw new Error(json.error || 'Server error');
+      if (!json.data || json.data.updatedAt < sentAt - 30000) {
+        throw new Error('Save may not have landed — try again');
+      }
       _set('synced');
       return { ok: true };
     } catch (e) {
