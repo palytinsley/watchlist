@@ -90,6 +90,7 @@
         items: mergedItems,
         recent: local.recent && local.recent.length ? local.recent : (remote.recent || []),
       };
+      delete merged.settings._pt; // strip internal push-verification token
 
       window.Store.importJSON(JSON.stringify(merged));
       _set('synced');
@@ -106,20 +107,29 @@
     _set('syncing');
     try {
       const data = JSON.parse(window.Store.exportJSON());
-      // Content-Type: text/plain is a CORS simple request — no preflight needed.
-      // GAS adds Access-Control-Allow-Origin: * so we can read the response.
-      const res = await fetch(url, {
+      // Embed a unique token so we can verify the write landed via a follow-up GET.
+      // GAS writeSettings persists all settings keys except gasUrl, so _pt is stored.
+      const pt = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      data.settings._pt = pt;
+      // GAS does not return CORS headers on POST responses (only GET), so use
+      // no-cors to avoid the CORS block. The write still goes through on the server.
+      await fetch(url, {
         method: 'POST',
+        mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'saveDatabase', data }),
       });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const json = await res.json();
-      if (!json.ok) throw new Error(json.error || 'Server error');
-      // doPost returns {ok:true} with no 'data' field.
-      // doGet returns {ok:true, data:{...}}. If 'data' is present, the POST was
-      // redirected to GET and the write never happened.
-      if (json.data !== undefined) throw new Error('POST redirected to GET — redeploy GAS script');
+      // Poll GET until the token appears in Settings (max ~5 s for GAS cold start).
+      let verified = false;
+      for (const wait of [2000, 3000]) {
+        await new Promise(r => setTimeout(r, wait));
+        try {
+          const check = await fetch(url + '?action=getDatabase', { cache: 'no-store' });
+          const json = await check.json();
+          if (json.ok && json.data?.settings?._pt === pt) { verified = true; break; }
+        } catch (_) {}
+      }
+      if (!verified) throw new Error('Write did not land — check GAS access settings');
       _set('synced');
       return { ok: true };
     } catch (e) {
