@@ -110,6 +110,21 @@
     }
   }
 
+  // ── auto-push ──────────────────────────────────────────────────────────────
+
+  let _autoPushTimer = null;
+
+  function scheduleAutoPush() {
+    if (!gasUrl()) return;
+    clearTimeout(_autoPushTimer);
+    _autoPushTimer = setTimeout(() => { push(); }, 2000);
+  }
+
+  // Hook into Store once it's available (Store loads before this script).
+  if (window.Store && window.Store.subscribe) {
+    window.Store.subscribe(scheduleAutoPush);
+  }
+
   window.SheetsSync = {
     getStatus, getStatusLabel, getStatusDotColor,
     onStatusChange,
