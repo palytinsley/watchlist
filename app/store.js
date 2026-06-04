@@ -6,7 +6,7 @@
   const LS_KEY = 'wl.v1';
 
   const DEFAULTS = {
-    settings: { apiKey: '', theme: 'dark' },
+    settings: { apiKey: '', theme: 'dark', gasUrl: '' },
     lists: [],   // { id, name, color, note, createdAt, order }
     items: {},   // key "type:id" -> item
     recent: [],  // recent search queries

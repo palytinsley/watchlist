@@ -1,2 +1,4 @@
 design_bundle/
 design_extracted.html
+.clasprc.json
+gas/.env
