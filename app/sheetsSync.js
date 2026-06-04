@@ -106,23 +106,16 @@
     _set('syncing');
     try {
       const data = JSON.parse(window.Store.exportJSON());
-      // GAS POST redirects strip CORS headers, so use no-cors (fire-and-forget).
-      // We verify success with a follow-up GET and compare updatedAt timestamps.
-      const sentAt = Date.now();
-      await fetch(url, {
+      // Content-Type: text/plain is a CORS simple request — no preflight needed.
+      // GAS adds Access-Control-Allow-Origin: * so we can read the response.
+      const res = await fetch(url, {
         method: 'POST',
-        mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'saveDatabase', data }),
       });
-      // Confirm the write landed by reading back updatedAt from the sheet.
-      const check = await fetch(url + '?action=getDatabase', { cache: 'no-store' });
-      if (!check.ok) throw new Error('HTTP ' + check.status);
-      const json = await check.json();
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const json = await res.json();
       if (!json.ok) throw new Error(json.error || 'Server error');
-      if (!json.data || json.data.updatedAt < sentAt - 30000) {
-        throw new Error('Save may not have landed — try again');
-      }
       _set('synced');
       return { ok: true };
     } catch (e) {
