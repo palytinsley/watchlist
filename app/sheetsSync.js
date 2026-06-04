@@ -116,6 +116,10 @@
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const json = await res.json();
       if (!json.ok) throw new Error(json.error || 'Server error');
+      // doPost returns {ok:true} with no 'data' field.
+      // doGet returns {ok:true, data:{...}}. If 'data' is present, the POST was
+      // redirected to GET and the write never happened.
+      if (json.data !== undefined) throw new Error('POST redirected to GET — redeploy GAS script');
       _set('synced');
       return { ok: true };
     } catch (e) {
