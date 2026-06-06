@@ -105,7 +105,18 @@
     _set('syncing');
     try {
       const data = JSON.parse(window.Store.exportJSON());
-      const payload = encodeURIComponent(JSON.stringify({ action: 'saveDatabase', data }));
+      const slimData = Object.assign({}, data, {
+        items: Object.fromEntries(
+          Object.entries(data.items || {}).map(([k, it]) => {
+            const { overview, backdrop, ...rest } = it;
+            return [k, rest];
+          })
+        )
+      });
+      const payload = encodeURIComponent(JSON.stringify({ action: 'saveDatabase', data: slimData }));
+      if (payload.length > 7500) {
+        throw new Error('Payload too large for GAS URL (' + payload.length + ' chars)');
+      }
       const res = await fetch(url + '?payload=' + payload, { cache: 'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const json = await res.json();
