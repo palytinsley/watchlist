@@ -33,9 +33,15 @@
 
     const ratingHTML = (det && det.rating) || base.rating
       ? `<span class="detail__rating">${U.ti('star-filled')} ${(det && det.rating) || base.rating}</span>` : '';
+    const certHTML = det && det.certification
+      ? ` <span class="certbadge">${U.esc(det.certification)}</span>` : '';
+    const metaHTML = `${U.esc(metaLine)}${certHTML}${ratingHTML ? ' · ' + ratingHTML : ''}`;
 
     const trailerBtn = det && det.trailer
       ? `<button class="btn btn--primary btn--sm detail__trailerbtn" data-action="play-trailer" data-key="${key}">${U.ti('player-play-filled')} Trailer</button>`
+      : '';
+    const imdbBtn = det && det.imdbId
+      ? `<a class="iconbtn" href="https://www.imdb.com/title/${U.esc(det.imdbId)}" target="_blank" rel="noopener" aria-label="View on IMDb"><span class="imdbmark">IMDb</span></a>`
       : '';
 
     return `
@@ -45,6 +51,7 @@
           <div class="detail__nav">
             <button class="iconbtn" data-action="back">${U.ti('chevron-left')}</button>
             <div class="detail__navgroup">
+              ${imdbBtn}
               <button class="iconbtn" data-action="add-open" data-key="${key}">${U.ti(stored && stored.lists.length ? 'bookmark-filled' : 'bookmark')}</button>
             </div>
           </div>
@@ -55,7 +62,7 @@
           <div class="detail__poster">${U.posterImg(poster, title, 'w342')}</div>
           <div class="detail__heading">
             <div class="detail__title">${U.esc(title)}</div>
-            <div class="detail__meta">${U.esc(metaLine)} ${ratingHTML ? '· ' + ratingHTML : ''}</div>
+            <div class="detail__meta">${metaHTML}</div>
           </div>
         </div>
 
@@ -140,7 +147,66 @@
           </div>`).join('')}</div>`;
     }
 
+    html += providersSection(det);
+    html += recsSection(det);
+    html += collectionSection(key, det);
+
     return html;
+  }
+
+  function providersSection(det) {
+    if (!Object.prototype.hasOwnProperty.call(det, 'providers') || det.providers === false) return '';
+    const providers = det.providers;
+    let body = '';
+    if (providers) {
+      body += providerGroup('Subscription', providers.flatrate);
+      body += providerGroup('Rent', providers.rent);
+      body += providerGroup('Buy', providers.buy);
+    }
+    if (!body) body = `<div class="muted" style="font-size:13px;margin-top:8px">Not currently streaming</div>`;
+    return `<div class="label" style="padding:0;margin:22px 0 4px">${U.ti('tv-2')} Where to Watch</div>${body}`;
+  }
+
+  function providerGroup(label, providers) {
+    if (!providers || !providers.length) return '';
+    return `<div class="provider-group__label">${U.esc(label)}</div>
+      <div class="providers">${providers.map(providerHTML).join('')}</div>`;
+  }
+
+  function providerHTML(p) {
+    const logo = p.logo ? `https://image.tmdb.org/t/p/w92${p.logo}` : '';
+    return `<div class="provider">
+      ${logo ? `<img class="provider__logo" src="${logo}" alt="">` : `<div class="provider__logo"></div>`}
+      <div class="provider__name">${U.esc(p.name)}</div>
+    </div>`;
+  }
+
+  function recsSection(det) {
+    const recs = det.recommendations || [];
+    if (!recs.length) return '';
+    recs.forEach(r => { App().searchCache[r.key] = r; });
+    return `<div class="label" style="padding:0;margin:22px 0 10px">You might like</div>
+      <div class="shelf__rail" style="padding-left:0;padding-right:0">${recs.map(r => miniPoster(r)).join('')}</div>`;
+  }
+
+  function collectionSection(key, det) {
+    const col = det.collection;
+    if (!col || !col.parts || !col.parts.length) return '';
+    const parts = col.parts.filter(Boolean);
+    parts.forEach(p => { App().searchCache[p.key] = p; });
+    return `<div class="label" style="padding:0;margin:22px 0 10px">Part of ${U.esc(col.name)}</div>
+      <div class="shelf__rail" style="padding-left:0;padding-right:0">${parts.map(p => miniPoster(p, p.key === key)).join('')}</div>`;
+  }
+
+  function miniPoster(it, current) {
+    const stored = S.getItem(it.key);
+    let badge = '';
+    if (current) badge = `<div class="poster__badge poster__badge--watched">${U.ti('check')}</div>`;
+    else if (stored && stored.status === 'watching') badge = `<div class="poster__badge poster__badge--watching">${U.ti('player-play-filled')}</div>`;
+    else if (stored && stored.status === 'watched') badge = `<div class="poster__badge poster__badge--watched">${U.ti('check')}</div>`;
+    return `<div class="poster" style="width:80px;aspect-ratio:2/3${current ? ';opacity:0.5' : ''}" data-action="open-detail" data-key="${U.esc(it.key)}" data-longpress="item" data-key2="${U.esc(it.key)}">
+      ${U.posterImg(it.poster, it.title)}${badge}
+    </div>`;
   }
 
   function seasonRow(key, stored, s) {
@@ -170,23 +236,57 @@
   // fetch details after render
   async function afterDetail(view) {
     const key = view.key;
-    if (App().detailCache[key]) return;
     const base = baseInfo(key);
     if (!base) return;
     try {
-      const det = await T.details(base.type, base.id);
-      App().detailCache[key] = det;
-      // enrich stored item if present
-      if (S.getItem(key)) S.enrichItem(key, det);
-      // only patch if still on this detail
-      const top = App().state.stack[App().state.stack.length - 1];
-      if (top && top.type === 'detail' && top.key === key) {
-        const rest = document.getElementById('detail-rest');
-        if (rest) rest.innerHTML = detailRest(key, S.getItem(key), det);
-        // backdrop / poster may have been missing
-        App().render();
+      let det = App().detailCache[key];
+      let changed = false;
+      if (!det) {
+        det = await T.details(base.type, base.id);
+        App().detailCache[key] = det;
+        if (S.getItem(key)) S.enrichItem(key, det);
+        changed = true;
+      }
+
+      const jobs = [];
+      if (!hasOwn(det, 'providers')) jobs.push(T.watchProviders(base.type, base.id)
+        .then(v => { det.providers = v; })
+        .catch(() => { det.providers = false; }));
+      if (!hasOwn(det, 'recommendations')) jobs.push(T.recommendations(base.type, base.id)
+        .then(v => { det.recommendations = v || []; })
+        .catch(() => { det.recommendations = []; }));
+
+      if (jobs.length) {
+        await Promise.all(jobs);
+        changed = true;
+      }
+      if (changed) renderIfCurrent(key, true);
+
+      if (det.collection && !det.collection.parts && !det.collectionLoading) {
+        det.collectionLoading = true;
+        T.collection(det.collection.id).then(col => {
+          det.collection = Object.assign({}, det.collection, col);
+          det.collectionLoading = false;
+          renderIfCurrent(key, false);
+        }).catch(() => { det.collectionLoading = false; det.collection.parts = []; });
       }
     } catch (e) { App().handleApiError(e); }
+  }
+
+  function hasOwn(obj, prop) {
+    return Object.prototype.hasOwnProperty.call(obj, prop);
+  }
+
+  function renderIfCurrent(key, full) {
+    const top = App().state.stack[App().state.stack.length - 1];
+    if (!top || top.type !== 'detail' || top.key !== key) return;
+    if (full) {
+      App().render();
+      return;
+    }
+    const det = App().detailCache[key];
+    const rest = document.getElementById('detail-rest');
+    if (rest && det) rest.innerHTML = detailRest(key, S.getItem(key), det);
   }
 
   // ── seasons / episodes ───────────────────────────────────────────────────
@@ -280,7 +380,13 @@
   // ── item context menu (long-press) ───────────────────────────────────────
   function openItemMenu(key, x, y) {
     const it = S.getItem(key);
-    if (!it) return;
+    if (!it) {
+      if (!baseInfo(key)) return;
+      U.openMenu(x, y, [
+        { icon: 'bookmark', label: 'Add to list…', onClick: () => openAddSheet(key) },
+      ]);
+      return;
+    }
     const items = [
       { icon: 'player-play-filled', label: it.status === 'watching' ? 'Mark not watching' : 'Mark watching', onClick: () => { S.setStatus(key, it.status === 'watching' ? 'want' : 'watching'); App().render(); U.toast('Updated', 'check'); } },
       { icon: 'check', label: it.status === 'watched' ? 'Mark unwatched' : 'Mark watched', onClick: () => { S.setStatus(key, it.status === 'watched' ? 'want' : 'watched'); App().render(); U.toast('Updated', 'check'); } },

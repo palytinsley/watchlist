@@ -10,6 +10,18 @@
       stack: [],            // pushed overlay views
       homeFilter: 'all',    // all | watching | want | watched
       activityTab: 'log',   // log | stats
+      exploreState: {
+        type: 'movie',
+        genreId: null,
+        minRating: 0,
+        page: 1,
+        results: [],
+        genres: [],
+        genreType: null,
+        loading: false,
+        loaded: false,
+        hasMore: true,
+      },
     },
     searchCache: {},        // key -> normalized search obj (for items not yet stored)
     detailCache: {},        // key -> full details
@@ -58,6 +70,7 @@
       if (top.type === 'detail') window.Views.afterDetail(top);
     } else {
       if (App.state.tab === 'search') afterSearch();
+      if (App.state.tab === 'explore') afterExplore();
       if (App.state.tab === 'activity' && App.state.activityTab === 'stats') window.Views.afterStats();
     }
   }
@@ -66,6 +79,7 @@
     switch (tab) {
       case 'home': return renderHome();
       case 'search': return renderSearch();
+      case 'explore': return renderExplore();
       case 'activity': return window.Views.renderActivity();
       case 'settings': return renderSettings();
     }
@@ -88,6 +102,7 @@
     const tabs = [
       ['home', 'stack-2', 'Lists'],
       ['search', 'search', 'Search'],
+      ['explore', 'compass', 'Explore'],
       ['activity', 'chart-histogram', 'Activity'],
       ['settings', 'settings', 'Settings'],
     ];
@@ -359,6 +374,109 @@
 
   function skeletonPosters(n) {
     return Array.from({ length: n }, () => `<div class="sk" style="aspect-ratio:2/3"></div>`).join('');
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // EXPLORE
+  // ════════════════════════════════════════════════════════════════════════
+  function renderExplore() {
+    const st = App.state.exploreState;
+    const typeBtn = (type, label) =>
+      `<button data-on="${st.type === type}" data-action="explore-type" data-type="${type}">${label}</button>`;
+    const genreChips = [`<button class="chip" data-on="${!st.genreId}" data-action="explore-genre" data-genre="">All</button>`]
+      .concat((st.genres || []).map(g =>
+        `<button class="chip" data-on="${String(st.genreId) === String(g.id)}" data-action="explore-genre" data-genre="${g.id}">${U.esc(g.name)}</button>`))
+      .join('');
+    const ratingChip = (n, label) =>
+      `<button class="chip" data-on="${st.minRating === n}" data-action="explore-rating" data-rating="${n}">${label}</button>`;
+
+    let body = '';
+    if (st.loading && !st.results.length) {
+      body = `<div class="discgrid">${skeletonPosters(9)}</div>`;
+    } else if (st.loaded && !st.results.length) {
+      body = `<div class="empty"><div class="empty__art">${U.ti('compass')}</div><div class="empty__text">No titles match those filters.</div></div>`;
+    } else {
+      body = `<div class="discgrid">${st.results.map(discoverCard).join('')}</div>`;
+      if (st.loading) body += `<div class="center-load" style="padding:24px"><div class="spinner"></div></div>`;
+      else if (st.hasMore && st.results.length) {
+        body += `<div class="safe" style="margin-top:18px"><button class="btn btn--full" data-action="explore-more">${U.ti('plus')} Load more</button></div>`;
+      }
+    }
+
+    return `
+      <div class="view">
+        <div class="topbar">
+          <div class="topbar__title">Explore</div>
+        </div>
+        <div class="safe" style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+          <div class="toggle">${typeBtn('movie', 'Films')}${typeBtn('tv', 'TV')}</div>
+        </div>
+        <div class="segrow" style="margin-top:8px">${ratingChip(0, 'Any rating')}${ratingChip(7, '7+')}${ratingChip(8, '8+')}</div>
+        <div class="segrow">${genreChips}</div>
+        ${body}
+      </div>`;
+  }
+
+  function discoverCard(r) {
+    App.searchCache[r.key] = r;
+    return `<div class="disccard" data-action="open-detail" data-key="${r.key}" data-longpress="item" data-key2="${r.key}">
+      ${U.posterImg(r.poster, r.title)}
+      <div class="disccard__title">${U.esc(r.title)}</div>
+    </div>`;
+  }
+
+  function afterExplore() {
+    const st = App.state.exploreState;
+    if (!st.loading && st.genreType !== st.type) loadExploreGenres();
+    if (!st.loading && !st.loaded && !st.results.length) loadExplore(true);
+  }
+
+  async function loadExploreGenres() {
+    const st = App.state.exploreState;
+    const type = st.type;
+    st.genreType = type;
+    try {
+      st.genres = await T.genres(type);
+      if (App.state.tab === 'explore' && App.state.exploreState.type === type) render();
+    } catch (e) {
+      st.genres = [];
+    }
+  }
+
+  function resetExplore() {
+    const st = App.state.exploreState;
+    st.page = 1;
+    st.results = [];
+    st.loading = false;
+    st.loaded = false;
+    st.hasMore = true;
+  }
+
+  async function loadExplore(reset) {
+    const st = App.state.exploreState;
+    if (st.loading) return;
+    if (reset) resetExplore();
+    st.loading = true;
+    render();
+    const params = {};
+    if (st.genreId) params.with_genres = st.genreId;
+    if (st.minRating) params['vote_average.gte'] = st.minRating;
+    try {
+      const page = st.page;
+      const data = await T.discover(st.type, params, page);
+      const seen = new Set(st.results.map(r => r.key));
+      const fresh = (data.results || []).filter(r => !seen.has(r.key));
+      st.results = reset ? fresh : st.results.concat(fresh);
+      st.hasMore = page < data.totalPages;
+      st.loaded = true;
+    } catch (e) {
+      handleApiError(e);
+      st.loaded = true;
+      st.hasMore = false;
+    } finally {
+      st.loading = false;
+      render();
+    }
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -669,6 +787,32 @@
       case 'tab': setTab(D.tab); break;
       case 'back': back(); break;
       case 'home-filter': App.state.homeFilter = D.filter; render(); break;
+      case 'explore-type': {
+        const st = App.state.exploreState;
+        if (st.type !== D.type) {
+          st.type = D.type;
+          st.genreId = null;
+          st.genres = [];
+          st.genreType = null;
+          loadExplore(true);
+        }
+        break;
+      }
+      case 'explore-genre': {
+        App.state.exploreState.genreId = D.genre || null;
+        loadExplore(true);
+        break;
+      }
+      case 'explore-rating': {
+        App.state.exploreState.minRating = +D.rating || 0;
+        loadExplore(true);
+        break;
+      }
+      case 'explore-more': {
+        App.state.exploreState.page += 1;
+        loadExplore(false);
+        break;
+      }
       case 'open-list': push({ type: 'list', id: D.list }); break;
       case 'open-detail': window.Views.openDetail(D.key); break;
       case 'fab-add': push({ type: 'newlist' }); break;

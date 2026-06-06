@@ -8,6 +8,7 @@
 
   const BASE = 'https://api.themoviedb.org/3';
   const IMG = 'https://image.tmdb.org/t/p';
+  const genreCache = {};
 
   // image helpers ----------------------------------------------------------
   function poster(path, size) {
@@ -59,18 +60,18 @@
     const data = await get('/search/multi', { query: query.trim(), include_adult: false, page: 1 });
     return (data.results || [])
       .filter(r => r.media_type === 'movie' || r.media_type === 'tv')
-      .map(normalizeSearch);
+      .map(r => normalizeSearch(r));
   }
 
   async function trending() {
     const data = await get('/trending/all/week', {});
     return (data.results || [])
       .filter(r => r.media_type === 'movie' || r.media_type === 'tv')
-      .map(normalizeSearch);
+      .map(r => normalizeSearch(r));
   }
 
-  function normalizeSearch(r) {
-    const type = r.media_type;
+  function normalizeSearch(r, forcedType) {
+    const type = forcedType || r.media_type;
     const title = r.title || r.name || 'Untitled';
     const dateStr = r.release_date || r.first_air_date || '';
     const year = dateStr ? dateStr.slice(0, 4) : '';
@@ -86,7 +87,9 @@
 
   // full details ----------------------------------------------------------
   async function details(type, id) {
-    const data = await get(`/${type}/${id}`, { append_to_response: 'videos,credits' });
+    const data = await get(`/${type}/${id}`, {
+      append_to_response: 'videos,credits,release_dates,content_ratings,external_ids',
+    });
     const title = data.title || data.name || 'Untitled';
     const dateStr = data.release_date || data.first_air_date || '';
     const year = dateStr ? dateStr.slice(0, 4) : '';
@@ -118,6 +121,8 @@
         }));
     }
 
+    const certification = pickCertification(type, data);
+
     return {
       key: type + ':' + id,
       type, id, title, year, genres,
@@ -135,6 +140,60 @@
       cast,
       trailer: pickTrailer(data.videos && data.videos.results),
       tagline: data.tagline || '',
+      collection: type === 'movie' && data.belongs_to_collection
+        ? { id: data.belongs_to_collection.id, name: data.belongs_to_collection.name }
+        : null,
+      certification,
+      imdbId: data.external_ids && data.external_ids.imdb_id ? data.external_ids.imdb_id : null,
+    };
+  }
+
+  async function watchProviders(type, id) {
+    const data = await get(`/${type}/${id}/watch/providers`, {});
+    const us = data.results && data.results.US;
+    if (!us) return null;
+    const normalizeProviders = arr => (arr || []).map(p => ({
+      id: p.provider_id,
+      name: p.provider_name,
+      logo: p.logo_path || null,
+    }));
+    const providers = {
+      flatrate: normalizeProviders(us.flatrate),
+      rent: normalizeProviders(us.rent),
+      buy: normalizeProviders(us.buy),
+    };
+    return providers.flatrate.length || providers.rent.length || providers.buy.length ? providers : null;
+  }
+
+  async function recommendations(type, id) {
+    const data = await get(`/${type}/${id}/recommendations`, { page: 1 });
+    return (data.results || []).slice(0, 10).map(r => normalizeSearch(r, type));
+  }
+
+  async function genres(type) {
+    if (genreCache[type]) return genreCache[type];
+    const data = await get(`/genre/${type}/list`, {});
+    genreCache[type] = data.genres || [];
+    return genreCache[type];
+  }
+
+  async function discover(type, params, page) {
+    const data = await get(`/discover/${type}`, Object.assign({
+      include_adult: false,
+      sort_by: 'popularity.desc',
+      page: page || 1,
+    }, params || {}));
+    return {
+      results: (data.results || []).map(r => normalizeSearch(r, type)),
+      totalPages: data.total_pages || 1,
+    };
+  }
+
+  async function collection(id) {
+    const data = await get(`/collection/${id}`, {});
+    return {
+      name: data.name || '',
+      parts: (data.parts || []).map(r => normalizeSearch(r, 'movie')),
     };
   }
 
@@ -164,9 +223,22 @@
     return yt.length ? { key: yt[0].key, name: yt[0].name } : null;
   }
 
+  function pickCertification(type, data) {
+    if (type === 'movie') {
+      const us = ((data.release_dates && data.release_dates.results) || [])
+        .find(r => r.iso_3166_1 === 'US');
+      const row = us && (us.release_dates || []).find(r => r.certification);
+      return row ? row.certification : null;
+    }
+    const tv = ((data.content_ratings && data.content_ratings.results) || [])
+      .find(r => r.iso_3166_1 === 'US');
+    return tv && tv.rating ? tv.rating : null;
+  }
+
   window.TMDB = {
     DEFAULT_API_KEY,
     poster, backdrop, profile,
     searchMulti, trending, details, seasonEpisodes, testKey,
+    watchProviders, recommendations, genres, discover, collection,
   };
 })();
