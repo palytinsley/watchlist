@@ -105,11 +105,8 @@
     _set('syncing');
     try {
       const data = JSON.parse(window.Store.exportJSON());
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'saveDatabase', data }),
-      });
+      const payload = encodeURIComponent(JSON.stringify({ action: 'saveDatabase', data }));
+      const res = await fetch(url + '?payload=' + payload, { cache: 'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const json = await res.json();
       if (!json.ok) throw new Error(json.error || 'Server error');

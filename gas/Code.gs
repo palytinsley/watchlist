@@ -21,6 +21,22 @@ const HEADERS = {
 
 function doGet(e) {
   try {
+    const payload = e && e.parameter && e.parameter.payload;
+    if (payload) {
+      // Requires redeployment after any change to this file
+      const lock = LockService.scriptLock();
+      lock.waitLock(15000);
+      try {
+        const parsed = JSON.parse(decodeURIComponent(payload));
+        if (parsed.action === 'saveDatabase') {
+          writeDatabase(parsed.data);
+          return respond({ ok: true });
+        }
+        return respond({ ok: false, error: 'Unknown action: ' + parsed.action });
+      } finally {
+        lock.releaseLock();
+      }
+    }
     const action = (e && e.parameter && e.parameter.action) || 'getDatabase';
     if (action === 'getDatabase') return respond({ ok: true, data: readDatabase() });
     return respond({ ok: false, error: 'Unknown action: ' + action });
