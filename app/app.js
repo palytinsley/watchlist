@@ -749,6 +749,8 @@
     if (!st) return;
     st.textContent = 'Testing…';
     try {
+      const v = (window.Store.getSettings().gasUrl || '').trim();
+      if (!v) { st.textContent = 'No GAS URL configured.'; return; }
       const res = await fetch(v + '?action=getDatabase', { cache: 'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const json = await res.json();
