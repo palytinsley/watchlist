@@ -579,7 +579,15 @@
   function handleAction(a, D, t, e) {
     switch (a) {
       case 'set-status': {
-        getOrCreateItem(D.key);
+        const it = getOrCreateItem(D.key);
+        if (it && it.status === D.status) {
+          const hadLists = it.lists && it.lists.length;
+          S.clearStatus(D.key);
+          if (!hadLists) { App().back(); break; }
+          App().render();
+          U.toast('Cleared', 'check');
+          break;
+        }
         S.setStatus(D.key, D.status);
         App().render();
         U.toast(U.STATUS[D.status].label, U.STATUS[D.status].icon);

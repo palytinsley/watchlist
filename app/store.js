@@ -164,6 +164,14 @@
     if (status !== 'watched') { it.watchedDate = null; }
     persist();
   }
+  function clearStatus(key) {
+    const it = state.items[key];
+    if (!it) return;
+    if (!it.lists || !it.lists.length) { removeItem(key); return; }
+    it.status = null;
+    it.watchedDate = null;
+    persist();
+  }
   function setWatchedDate(key, date) { const it = state.items[key]; if (it) { it.watchedDate = date; persist(); } }
   function setUserRating(key, n) { const it = state.items[key]; if (it) { it.userRating = n; persist(); } }
 
@@ -327,7 +335,7 @@
     getLists, getList, createList, updateList, deleteList, reorderLists,
     getItem, allItems, itemsInList, itemsByStatus,
     addToList, enrichItem, removeItem, setItemLists, toggleItemList,
-    setStatus, setWatchedDate, setUserRating,
+    setStatus, clearStatus, setWatchedDate, setUserRating,
     toggleEpisode, setSeasonWatched, markUpToEpisode, seasonProgress, ensureSeason,
     watchedLog, stats, statusCounts,
     pushRecent, getRecent, clearRecent,
