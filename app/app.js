@@ -1083,17 +1083,77 @@
       </div>`);
   }
 
-  // ── drag reorder (manage) ───────────────────────────────────────────────
-  let dragEl = null;
-  document.addEventListener('dragstart', (e) => { const r = e.target.closest('.mrow'); if (r) { dragEl = r; r.style.opacity = '0.4'; } });
-  document.addEventListener('dragend', (e) => { const r = e.target.closest('.mrow'); if (r) r.style.opacity = ''; dragEl = null; commitOrder(); });
-  document.addEventListener('dragover', (e) => {
-    if (!dragEl) return; e.preventDefault();
-    const r = e.target.closest('.mrow'); if (!r || r === dragEl) return;
-    const rect = r.getBoundingClientRect();
-    const after = (e.clientY - rect.top) > rect.height / 2;
-    r.parentNode.insertBefore(dragEl, after ? r.nextSibling : r);
+  // ── drag reorder (manage) — pointer-based so it works on desktop + touch ──
+  let dragEl = null, dragPlaceholder = null, dragPointerId = null;
+  let dragStartY = 0, dragMoving = false;
+
+  // Suppress native HTML5 drag on manage rows; pointer events drive reordering.
+  document.addEventListener('dragstart', (e) => { if (e.target.closest('.mrow')) e.preventDefault(); });
+
+  document.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    const handle = e.target.closest('[data-drag-handle]');
+    if (!handle) return;
+    const row = handle.closest('.mrow');
+    if (!row) return;
+    e.preventDefault();
+    dragEl = row;
+    dragPointerId = e.pointerId;
+    dragStartY = e.clientY;
+    dragMoving = false;
+    try { handle.setPointerCapture(e.pointerId); } catch (_) {}
   });
+
+  document.addEventListener('pointermove', (e) => {
+    if (!dragEl || e.pointerId !== dragPointerId) return;
+
+    // Begin the visual drag only after a small threshold (avoids stray taps).
+    if (!dragMoving) {
+      if (Math.abs(e.clientY - dragStartY) < 4) return;
+      dragMoving = true;
+      const rect = dragEl.getBoundingClientRect();
+      dragPlaceholder = document.createElement('div');
+      dragPlaceholder.className = 'mrow-placeholder';
+      dragPlaceholder.style.height = rect.height + 'px';
+      dragEl.parentNode.insertBefore(dragPlaceholder, dragEl);
+      dragEl.classList.add('mrow--dragging');
+      dragEl.style.width = rect.width + 'px';
+      dragEl.style.left = rect.left + 'px';
+      dragEl.style.top = rect.top + 'px';
+      document.body.classList.add('dragging-active');
+    }
+
+    e.preventDefault();
+    // Lift the row to follow the pointer.
+    dragEl.style.transform = `translateY(${e.clientY - dragStartY}px)`;
+
+    // Move the placeholder to the insertion point among the other rows.
+    const container = dragPlaceholder.parentNode;
+    const siblings = [...container.querySelectorAll('.mrow')].filter(r => r !== dragEl);
+    let target = null;
+    for (const r of siblings) {
+      const rr = r.getBoundingClientRect();
+      if (e.clientY < rr.top + rr.height / 2) { target = r; break; }
+    }
+    container.insertBefore(dragPlaceholder, target);
+  });
+
+  function endDrag() {
+    if (!dragEl) return;
+    if (dragMoving && dragPlaceholder) {
+      dragPlaceholder.parentNode.insertBefore(dragEl, dragPlaceholder);
+      dragPlaceholder.remove();
+      dragEl.classList.remove('mrow--dragging');
+      dragEl.style.transform = dragEl.style.width = dragEl.style.left = dragEl.style.top = '';
+      document.body.classList.remove('dragging-active');
+      commitOrder();
+    }
+    dragEl = dragPlaceholder = dragPointerId = null;
+    dragMoving = false;
+  }
+  document.addEventListener('pointerup', endDrag);
+  document.addEventListener('pointercancel', endDrag);
+
   function commitOrder() {
     const ids = [...document.querySelectorAll('.mrow')].map(r => r.dataset.list);
     if (ids.length) { S.reorderLists(ids); }
