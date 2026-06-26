@@ -1161,11 +1161,50 @@
     if (ids.length) { S.reorderLists(ids); }
   }
 
+  // ── sync pill ───────────────────────────────────────────────────────────
+  // Floating film-strip status pill shown during sync operations.
+  let _syncPillTimer = null;
+
+  function setupSyncPill() {
+    if (document.getElementById('sync-pill')) return;
+    const pill = U.node(`
+      <div class="sync-pill" id="sync-pill" data-show="false" data-state="local" aria-live="polite">
+        <div class="sync-pill__film" aria-hidden="true"></div>
+        <span class="sync-pill__icon"></span>
+        <span class="sync-pill__text">Syncing…</span>
+        <div class="sync-pill__film" aria-hidden="true"></div>
+      </div>
+    `);
+    document.body.appendChild(pill);
+
+    const iconEl = pill.querySelector('.sync-pill__icon');
+    const textEl = pill.querySelector('.sync-pill__text');
+    const CONTENT = {
+      syncing: { icon: 'refresh', text: 'Syncing…' },
+      synced:  { icon: 'check',   text: 'Synced' },
+      failed:  { icon: 'x',       text: 'Sync failed' },
+    };
+
+    window.SheetsSync.onStatusChange(s => {
+      const c = CONTENT[s];
+      if (!c) return; // 'local' is a no-op
+      clearTimeout(_syncPillTimer);
+      pill.setAttribute('data-state', s);
+      iconEl.innerHTML = U.ti(c.icon);
+      textEl.textContent = c.text;
+      pill.setAttribute('data-show', 'true');
+      if (s !== 'syncing') {
+        _syncPillTimer = setTimeout(() => { pill.setAttribute('data-show', 'false'); }, 2500);
+      }
+    });
+  }
+
   // ── boot ────────────────────────────────────────────────────────────────
   function init() {
     const st = S.getSettings();
     document.documentElement.setAttribute('data-theme', st.theme || 'dark');
     render();
+    if (window.SheetsSync) setupSyncPill();
     // Background pull on startup
     if (window.SheetsSync) {
       window.SheetsSync.pull().then(result => {

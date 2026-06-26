@@ -611,3 +611,43 @@ body.dragging-active { -webkit-user-select: none; user-select: none; }
 .muted { color: var(--text-faint); }
 .divider { height: 1px; background: var(--border); margin: 18px var(--gutter); }
 .appfoot { text-align: center; font-size: 12px; color: var(--text-faint); padding: 20px; }
+
+/* ── sync pill (film strip) ───────────────────────────────────────────── */
+.sync-pill {
+  position: fixed; left: 50%; bottom: calc(68px + 14px);
+  transform: translateX(-50%) translateY(10px);
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px 14px 7px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2); border: 1px solid var(--border);
+  font-size: 13px; font-weight: 500; color: var(--text);
+  box-shadow: var(--shadow);
+  z-index: 900; pointer-events: none;
+  opacity: 0;
+  transition: opacity 220ms ease, transform 220ms var(--ease);
+}
+.sync-pill[data-show="false"] { opacity: 0; transform: translateX(-50%) translateY(10px); }
+.sync-pill[data-show="true"]  { opacity: 1; transform: translateX(-50%) translateY(0); }
+.sync-pill[data-state="syncing"] { color: var(--star); }
+.sync-pill[data-state="synced"]  { color: var(--watched); }
+.sync-pill[data-state="failed"]  { color: var(--accent); }
+
+.sync-pill__film {
+  width: 6px; height: 34px; flex-shrink: 0;
+  border-radius: 1px; opacity: 0.35;
+  background: repeating-linear-gradient(
+    to bottom,
+    currentColor 0px, currentColor 5px,
+    transparent 5px, transparent 9px
+  );
+}
+.sync-pill[data-state="syncing"] .sync-pill__film {
+  animation: sync-film 0.4s steps(1) infinite;
+}
+@keyframes sync-film { from { background-position: 0 0; } to { background-position: 0 9px; } }
+
+.sync-pill__icon .ti { display: inline-block; }
+.sync-pill[data-state="syncing"] .sync-pill__icon .ti {
+  animation: sync-spin 1s linear infinite;
+}
+@keyframes sync-spin { to { transform: rotate(360deg); } }
