@@ -12,7 +12,7 @@
       activityTab: 'log',   // log | stats
       exploreScrollY: 0,    // saved scroll for explore root
       exploreState: {
-        type: 'movie',
+        type: 'foryou',
         genreId: null,
         minRating: 0,
         page: 1,
@@ -415,7 +415,7 @@
             <div class="topbar__title">Explore</div>
           </div>
           <div class="safe" style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
-            <div class="toggle">${typeBtn('movie', 'Films')}${typeBtn('tv', 'TV')}${typeBtn('foryou', 'For You')}</div>
+            <div class="toggle">${typeBtn('foryou', 'For You')}${typeBtn('movie', 'Films')}${typeBtn('tv', 'TV')}</div>
             <button class="iconbtn iconbtn--ghost" data-action="explore-foryou-refresh" aria-label="Refresh">${U.ti('refresh')}</button>
           </div>
           <div class="label" style="margin-top:8px">Based on your watched history</div>
@@ -442,7 +442,7 @@
           <div class="topbar__title">Explore</div>
         </div>
         <div class="safe" style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
-          <div class="toggle">${typeBtn('movie', 'Films')}${typeBtn('tv', 'TV')}${typeBtn('foryou', 'For You')}</div>
+          <div class="toggle">${typeBtn('foryou', 'For You')}${typeBtn('movie', 'Films')}${typeBtn('tv', 'TV')}</div>
         </div>
         <div class="segrow" style="margin-top:8px">${ratingChip(0, 'Any rating')}${ratingChip(7, '7+')}${ratingChip(8, '8+')}</div>
         <div class="segrow">${genreChips}</div>
