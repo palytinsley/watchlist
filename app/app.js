@@ -161,6 +161,7 @@
     return `
       <div class="view">
         <div class="topbar">
+          <img class="topbar__logo" src="icons/logo.png" alt="" width="36" height="36">
           <div class="topbar__title">Watchlist</div>
           <div class="topbar__spacer"></div>
           <button class="iconbtn iconbtn--ghost" data-action="tab" data-tab="search">${U.ti('search')}</button>
@@ -249,7 +250,7 @@
   function homeEmpty() {
     return `
       <div class="view">
-        <div class="topbar"><div class="topbar__title">Watchlist</div></div>
+        <div class="topbar"><img class="topbar__logo" src="icons/logo.png" alt="" width="36" height="36"><div class="topbar__title">Watchlist</div></div>
         <div class="empty">
           <div class="empty__art">${U.ti('movie')}</div>
           <div class="empty__title">No lists yet</div>
@@ -271,6 +272,7 @@
   function renderSearch() {
     return `
       <div class="view">
+        <div class="topbar"><img class="topbar__logo" src="icons/logo.png" alt="" width="36" height="36"></div>
         <div class="searchbar">
           <div class="searchbox">
             ${U.ti('search')}
@@ -412,7 +414,7 @@
       return `
         <div class="view">
           <div class="topbar">
-            <div class="topbar__title">Explore</div>
+            <img class="topbar__logo" src="icons/logo.png" alt="" width="36" height="36"><div class="topbar__title">Explore</div>
           </div>
           <div class="safe" style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
             <div class="toggle">${typeBtn('foryou', 'For You')}${typeBtn('movie', 'Films')}${typeBtn('tv', 'TV')}</div>
@@ -439,7 +441,7 @@
     return `
       <div class="view">
         <div class="topbar">
-          <div class="topbar__title">Explore</div>
+          <img class="topbar__logo" src="icons/logo.png" alt="" width="36" height="36"><div class="topbar__title">Explore</div>
         </div>
         <div class="safe" style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
           <div class="toggle">${typeBtn('foryou', 'For You')}${typeBtn('movie', 'Films')}${typeBtn('tv', 'TV')}</div>
@@ -772,7 +774,7 @@
 
     return `
       <div class="view">
-        <div class="topbar"><div class="topbar__title">Settings</div></div>
+        <div class="topbar"><img class="topbar__logo" src="icons/logo.png" alt="" width="36" height="36"><div class="topbar__title">Settings</div></div>
 
         <div class="label label--tight">TMDB API</div>
         <div class="setgroup">

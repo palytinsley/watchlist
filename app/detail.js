@@ -491,7 +491,7 @@
     const tab = App().state.activityTab;
     return `
       <div class="view">
-        <div class="topbar"><div class="topbar__title">Activity</div></div>
+        <div class="topbar"><img class="topbar__logo" src="icons/logo.png" alt="" width="36" height="36"><div class="topbar__title">Activity</div></div>
         <div class="segrow" style="margin-top:4px">
           <button class="chip" data-on="${tab === 'log'}" data-action="activity-tab" data-atab="log">Watched log</button>
           <button class="chip" data-on="${tab === 'stats'}" data-action="activity-tab" data-atab="stats">Stats</button>
