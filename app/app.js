@@ -10,6 +10,7 @@
       stack: [],            // pushed overlay views
       homeFilter: 'all',    // all | watching | want | watched
       activityTab: 'log',   // log | stats
+      exploreScrollY: 0,    // saved scroll for explore root
       exploreState: {
         type: 'movie',
         genreId: null,
@@ -21,6 +22,9 @@
         loading: false,
         loaded: false,
         hasMore: true,
+        forYouResults: [],
+        forYouLoaded: false,
+        forYouLoading: false,
       },
     },
     searchCache: {},        // key -> normalized search obj (for items not yet stored)
@@ -42,8 +46,12 @@
     window.scrollTo(0, 0);
   }
   function back() {
+    const returningToExplore = App.state.tab === 'explore' && App.state.stack.length === 1;
     App.state.stack.pop();
     render();
+    if (returningToExplore) {
+      requestAnimationFrame(() => window.scrollTo(0, App.state.exploreScrollY));
+    }
   }
   function replaceTop(view) {
     App.state.stack[App.state.stack.length - 1] = view;
@@ -68,6 +76,7 @@
     if (stack.length) {
       const top = stack[stack.length - 1];
       if (top.type === 'detail') window.Views.afterDetail(top);
+      if (top.type === 'person') window.Views.afterPerson(top);
     } else {
       if (App.state.tab === 'search') afterSearch();
       if (App.state.tab === 'explore') afterExplore();
@@ -88,6 +97,7 @@
   function renderOverlay(view) {
     switch (view.type) {
       case 'detail': return window.Views.renderDetail(view);
+      case 'person': return window.Views.renderPerson(view);
       case 'list': return renderListView(view);
       case 'newlist': return renderNewList(view);
       case 'manage': return renderManage();
@@ -390,6 +400,29 @@
     const ratingChip = (n, label) =>
       `<button class="chip" data-on="${st.minRating === n}" data-action="explore-rating" data-rating="${n}">${label}</button>`;
 
+    if (st.type === 'foryou') {
+      let fyBody;
+      if (st.forYouLoading && !st.forYouResults.length) {
+        fyBody = `<div class="discgrid">${skeletonPosters(9)}</div>`;
+      } else if (st.forYouLoaded && !st.forYouResults.length) {
+        fyBody = `<div class="empty"><div class="empty__art">${U.ti('compass')}</div><div class="empty__text">Watch something first to get suggestions.</div></div>`;
+      } else {
+        fyBody = `<div class="discgrid">${st.forYouResults.map(discoverCard).join('')}</div>`;
+      }
+      return `
+        <div class="view">
+          <div class="topbar">
+            <div class="topbar__title">Explore</div>
+          </div>
+          <div class="safe" style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+            <div class="toggle">${typeBtn('movie', 'Films')}${typeBtn('tv', 'TV')}${typeBtn('foryou', 'For You')}</div>
+            <button class="iconbtn iconbtn--ghost" data-action="explore-foryou-refresh" aria-label="Refresh">${U.ti('refresh')}</button>
+          </div>
+          <div class="label" style="margin-top:8px">Based on your watched history</div>
+          ${fyBody}
+        </div>`;
+    }
+
     let body = '';
     if (st.loading && !st.results.length) {
       body = `<div class="discgrid">${skeletonPosters(9)}</div>`;
@@ -409,7 +442,7 @@
           <div class="topbar__title">Explore</div>
         </div>
         <div class="safe" style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
-          <div class="toggle">${typeBtn('movie', 'Films')}${typeBtn('tv', 'TV')}</div>
+          <div class="toggle">${typeBtn('movie', 'Films')}${typeBtn('tv', 'TV')}${typeBtn('foryou', 'For You')}</div>
         </div>
         <div class="segrow" style="margin-top:8px">${ratingChip(0, 'Any rating')}${ratingChip(7, '7+')}${ratingChip(8, '8+')}</div>
         <div class="segrow">${genreChips}</div>
@@ -427,6 +460,10 @@
 
   function afterExplore() {
     const st = App.state.exploreState;
+    if (st.type === 'foryou') {
+      if (!st.forYouLoaded && !st.forYouLoading) loadForYou();
+      return;
+    }
     if (!st.loading && st.genreType !== st.type) loadExploreGenres();
     if (!st.loading && !st.loaded && !st.results.length) loadExplore(true);
   }
@@ -479,6 +516,48 @@
     }
   }
 
+  async function loadForYou() {
+    const st = App.state.exploreState;
+    if (st.forYouLoading) return;
+    st.forYouLoading = true;
+    render();
+
+    const watched = S.itemsByStatus('watched');
+    if (!watched.length) {
+      st.forYouLoaded = true;
+      st.forYouLoading = false;
+      render();
+      return;
+    }
+    const seeds = watched.slice().sort(() => Math.random() - 0.5).slice(0, 5);
+
+    try {
+      const batches = await Promise.all(
+        seeds.map(it => T.recommendations(it.type, it.id).catch(() => []))
+      );
+      const seen = new Set();
+      const libraryKeys = new Set(S.allItems().map(it => it.key));
+      const results = [];
+      for (const batch of batches) {
+        for (const r of batch) {
+          if (!seen.has(r.key) && !libraryKeys.has(r.key)) {
+            seen.add(r.key);
+            App.searchCache[r.key] = r;
+            results.push(r);
+          }
+        }
+      }
+      st.forYouResults = results.sort(() => Math.random() - 0.5);
+      st.forYouLoaded = true;
+    } catch (e) {
+      handleApiError(e);
+      st.forYouLoaded = true;
+    } finally {
+      st.forYouLoading = false;
+      if (App.state.tab === 'explore') render();
+    }
+  }
+
   // ════════════════════════════════════════════════════════════════════════
   // LIST VIEW
   // ════════════════════════════════════════════════════════════════════════
@@ -497,9 +576,25 @@
     const sub = [`${all.length} title${all.length !== 1 ? 's' : ''}`, totalRuntime ? U.formatRuntime(totalRuntime) : '', counts.watching ? `${counts.watching} watching` : '']
       .filter(Boolean).join(' · ');
 
-    const grid = items.length
-      ? `<div class="pgrid">${items.map(it => listPoster(it)).join('')}</div>`
-      : emptyFiltered(filter);
+    let grid;
+    if (filter === 'all') {
+      const unwatched = items.filter(it => it.status !== 'watched');
+      const watchedItems = items.filter(it => it.status === 'watched');
+      if (!unwatched.length && !watchedItems.length) {
+        grid = emptyFiltered(filter);
+      } else {
+        grid = '';
+        if (unwatched.length) grid += `<div class="pgrid">${unwatched.map(it => listPoster(it)).join('')}</div>`;
+        if (watchedItems.length) {
+          grid += `<div class="divider"></div><div class="label">Watched <span class="chip__count">${watchedItems.length}</span></div>`
+            + `<div class="pgrid">${watchedItems.map(it => listPoster(it)).join('')}</div>`;
+        }
+      }
+    } else {
+      grid = items.length
+        ? `<div class="pgrid">${items.map(it => listPoster(it)).join('')}</div>`
+        : emptyFiltered(filter);
+    }
 
     return `
       <div class="view view--push">
@@ -536,13 +631,16 @@
     if (it.status === 'watching') badge = `<div class="poster__badge poster__badge--watching">${U.ti('player-play-filled')}</div>`;
     else if (it.status === 'watched') badge = `<div class="poster__badge poster__badge--watched">${U.ti('check')}</div>`;
     const len = it.type === 'tv' ? (it.seasonsCount ? 'S' + it.seasonsCount : 'TV') : U.formatRuntime(it.runtime);
+    const right = it.userRating > 0
+      ? `<span style="color:var(--star)">${'★'.repeat(it.userRating)}</span>`
+      : `<span>${len}</span>`;
     return `
       <div>
         <div class="poster" style="aspect-ratio:2/3" data-action="open-detail" data-key="${it.key}"
           data-longpress="item" data-key2="${it.key}">
           ${U.posterImg(it.poster, it.title)}${badge}
         </div>
-        <div class="poster__meta"><div class="poster__meta-row"><span>${it.rating ? '★ ' + it.rating : ''}</span><span>${len}</span></div></div>
+        <div class="poster__meta"><div class="poster__meta-row"><span>${it.rating ? '★ ' + it.rating : ''}</span>${right}</div></div>
       </div>`;
   }
 
@@ -789,13 +887,25 @@
       case 'home-filter': App.state.homeFilter = D.filter; render(); break;
       case 'explore-type': {
         const st = App.state.exploreState;
-        if (st.type !== D.type) {
-          st.type = D.type;
+        if (st.type === D.type) break;
+        st.type = D.type;
+        if (D.type === 'foryou') {
+          render();
+          if (!st.forYouLoaded && !st.forYouLoading) loadForYou();
+        } else {
           st.genreId = null;
           st.genres = [];
           st.genreType = null;
           loadExplore(true);
         }
+        break;
+      }
+      case 'explore-foryou-refresh': {
+        const st = App.state.exploreState;
+        st.forYouResults = [];
+        st.forYouLoaded = false;
+        st.forYouLoading = false;
+        loadForYou();
         break;
       }
       case 'explore-genre': {
@@ -814,7 +924,14 @@
         break;
       }
       case 'open-list': push({ type: 'list', id: D.list }); break;
-      case 'open-detail': window.Views.openDetail(D.key); break;
+      case 'open-detail': {
+        if (App.state.tab === 'explore' && App.state.stack.length === 0) {
+          App.state.exploreScrollY = window.scrollY;
+        }
+        window.Views.openDetail(D.key);
+        break;
+      }
+      case 'open-person': App.push({ type: 'person', id: +D.personId, name: D.personName }); break;
       case 'fab-add': push({ type: 'newlist' }); break;
       case 'pick-color': document.querySelectorAll('#nl-colors .swatch').forEach(s => s.setAttribute('data-on', s.dataset.color === D.color)); break;
       case 'save-list': saveList(D.edit); break;

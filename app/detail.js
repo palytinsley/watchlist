@@ -115,11 +115,15 @@
 
     // facts
     const facts = [];
-    if (det.crewName) facts.push(`${det.crewLabel}: ${det.crewName}`);
     if (det.type === 'movie' && det.runtime) facts.push(U.formatRuntime(det.runtime));
     if (det.type === 'tv' && det.episodesCount) facts.push(det.episodesCount + ' episodes');
     if (det.type === 'tv' && det.status) facts.push(det.status);
-    if (facts.length) html += `<div class="facts">${facts.map(f => `<span class="fact">${U.esc(f)}</span>`).join('')}</div>`;
+    const crewFact = det.crewName
+      ? `<span class="fact">${U.esc(det.crewLabel)}: ${det.crewId
+          ? `<button class="crewlink" data-action="open-person" data-person-id="${det.crewId}" data-person-name="${U.esc(det.crewName)}">${U.esc(det.crewName)}</button>`
+          : U.esc(det.crewName)}</span>`
+      : '';
+    if (crewFact || facts.length) html += `<div class="facts">${crewFact}${facts.map(f => `<span class="fact">${U.esc(f)}</span>`).join('')}</div>`;
 
     // in lists
     if (stored && stored.lists.length) {
@@ -140,7 +144,7 @@
     if (det.cast && det.cast.length) {
       html += `<div class="label" style="padding:0;margin:22px 0 10px">Cast</div>
         <div class="cast">${det.cast.map(c => `
-          <div class="castmember">
+          <div class="castmember"${c.id ? ` style="cursor:pointer" data-action="open-person" data-person-id="${c.id}" data-person-name="${U.esc(c.name)}"` : ''}>
             <div class="castmember__img">${c.profile ? `<img src="${T.profile(c.profile)}" alt="" loading="lazy">` : U.ti('user')}</div>
             <div class="castmember__name">${U.esc(c.name)}</div>
             <div class="castmember__role">${U.esc(c.character || '')}</div>
@@ -289,6 +293,72 @@
     if (rest && det) rest.innerHTML = detailRest(key, S.getItem(key), det);
   }
 
+  // ── person (cast / crew) ─────────────────────────────────────────────────
+  function renderPerson(view) {
+    const data = App().detailCache['person:' + view.id];
+    const name = (data && data.name) || view.name || 'Loading…';
+    const profile = data && data.profile;
+    const knownFor = data && data.knownFor;
+
+    const head = `
+      <div class="person__head">
+        <div class="person__photo">${profile ? `<img src="${T.profile(profile, 'w185')}" alt="">` : U.ti('user')}</div>
+        <div class="person__heading">
+          <div class="detail__title">${U.esc(name)}</div>
+          ${knownFor ? `<div class="detail__meta">${U.esc(knownFor)}</div>` : ''}
+        </div>
+      </div>`;
+
+    let body;
+    if (!data) {
+      body = restSkeleton();
+    } else {
+      body = '';
+      if (data.biography) {
+        body += `<div class="person__bio detail__overview clamp" id="ov-person:${view.id}">${U.esc(data.biography)}</div>
+          <span class="detail__more" data-action="toggle-overview" data-key="person:${view.id}">Read more</span>`;
+      }
+      const credits = data.credits || [];
+      if (credits.length) {
+        body += `<div class="label" style="padding:0;margin:22px 0 10px">Known for</div>
+          <div class="shelf__rail" style="padding-left:0;padding-right:0">${credits.map(c => miniPoster(c)).join('')}</div>`;
+      }
+    }
+
+    return `
+      <div class="view view--push">
+        <div class="backbar">
+          <button class="iconbtn iconbtn--ghost" data-action="back">${U.ti('chevron-left')}</button>
+        </div>
+        <div class="safe">
+          ${head}
+          <div id="person-rest" style="margin-top:18px">${body}</div>
+        </div>
+        <div style="height:20px"></div>
+      </div>`;
+  }
+
+  async function afterPerson(view) {
+    const cacheKey = 'person:' + view.id;
+    if (App().detailCache[cacheKey]) return;
+    try {
+      const [details, credits] = await Promise.all([
+        T.personDetails(view.id),
+        T.personCredits(view.id).catch(() => []),
+      ]);
+      const data = Object.assign({}, details, { credits: credits || [] });
+      App().detailCache[cacheKey] = data;
+      (data.credits || []).forEach(r => { App().searchCache[r.key] = r; });
+      renderIfCurrentPerson(view.id);
+    } catch (e) { App().handleApiError(e); }
+  }
+
+  function renderIfCurrentPerson(id) {
+    const top = App().state.stack[App().state.stack.length - 1];
+    if (!top || top.type !== 'person' || top.id !== id) return;
+    App().render();
+  }
+
   // ── seasons / episodes ───────────────────────────────────────────────────
   function getOrCreateItem(key) {
     let it = S.getItem(key);
@@ -390,10 +460,28 @@
     const items = [
       { icon: 'player-play-filled', label: it.status === 'watching' ? 'Mark not watching' : 'Mark watching', onClick: () => { S.setStatus(key, it.status === 'watching' ? 'want' : 'watching'); App().render(); U.toast('Updated', 'check'); } },
       { icon: 'check', label: it.status === 'watched' ? 'Mark unwatched' : 'Mark watched', onClick: () => { S.setStatus(key, it.status === 'watched' ? 'want' : 'watched'); App().render(); U.toast('Updated', 'check'); } },
+    ];
+    if (it.status === 'watched') {
+      items.push({ icon: 'star-filled', label: 'Rate…', onClick: () => openRateSheet(key) });
+    }
+    items.push(
       { icon: 'bookmark', label: 'Add to list…', onClick: () => openAddSheet(key) },
       { icon: 'trash', label: 'Remove from library', danger: true, onClick: () => { S.removeItem(key); App().render(); U.toast('Removed', 'trash'); } },
-    ];
+    );
     U.openMenu(x, y, items);
+  }
+
+  function openRateSheet(key) {
+    const it = S.getItem(key);
+    if (!it) return;
+    const rating = it.userRating || 0;
+    const stars = Array.from({ length: 5 }, (_, i) =>
+      `<span class="star ${i < rating ? 'on' : ''}" data-action="rate-sheet" data-key="${key}" data-n="${i + 1}" style="font-size:34px">${U.ti('star-filled')}</span>`).join('');
+    const html = `
+      <div class="sheet__title">${U.esc(it.title)}</div>
+      <div class="muted" style="font-size:13px;margin-top:4px">How would you rate it?</div>
+      <div class="stars" style="gap:8px;margin-top:18px;justify-content:center;display:flex">${stars}</div>`;
+    U.openSheet(html);
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -498,6 +586,7 @@
         break;
       }
       case 'rate': S.setUserRating(D.key, +D.n); App().render(); break;
+      case 'rate-sheet': S.setUserRating(D.key, +D.n); U.closeSheet(); App().render(); U.toast('Rated', 'star-filled'); break;
       case 'edit-date': editWatchedDate(D.key); break;
       case 'toggle-overview': {
         const ov = document.getElementById('ov-' + D.key);
@@ -563,6 +652,7 @@
 
   window.Views = {
     openDetail, renderDetail, afterDetail,
+    renderPerson, afterPerson,
     openAddSheet, openItemMenu,
     renderActivity, renderLogFull: renderActivity, afterStats,
     handleAction,

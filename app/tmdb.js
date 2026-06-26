@@ -95,16 +95,16 @@
     const year = dateStr ? dateStr.slice(0, 4) : '';
     const genres = (data.genres || []).map(g => g.name);
     const cast = (data.credits && data.credits.cast || []).slice(0, 12).map(c => ({
-      name: c.name, character: c.character, profile: c.profile_path || null,
+      name: c.name, character: c.character, profile: c.profile_path || null, id: c.id,
     }));
 
-    let crewLabel = '', crewName = '';
+    let crewLabel = '', crewName = '', crewId = null;
     if (type === 'movie') {
       const dir = (data.credits && data.credits.crew || []).find(c => c.job === 'Director');
-      if (dir) { crewLabel = 'Director'; crewName = dir.name; }
+      if (dir) { crewLabel = 'Director'; crewName = dir.name; crewId = dir.id; }
     } else {
       const creator = (data.created_by || [])[0];
-      if (creator) { crewLabel = 'Creator'; crewName = creator.name; }
+      if (creator) { crewLabel = 'Creator'; crewName = creator.name; crewId = creator.id; }
     }
 
     // seasons (exclude season 0 specials by default but keep if it's the only one)
@@ -136,7 +136,7 @@
       episodesCount: type === 'tv' ? (data.number_of_episodes || null) : null,
       status: data.status || null, // e.g. "Returning Series", "Ended"
       seasons,
-      crewLabel, crewName,
+      crewLabel, crewName, crewId,
       cast,
       trailer: pickTrailer(data.videos && data.videos.results),
       tagline: data.tagline || '',
@@ -168,6 +168,36 @@
   async function recommendations(type, id) {
     const data = await get(`/${type}/${id}/recommendations`, { page: 1 });
     return (data.results || []).slice(0, 10).map(r => normalizeSearch(r, type));
+  }
+
+  async function personDetails(personId) {
+    const data = await get(`/person/${personId}`, {});
+    return {
+      id: data.id,
+      name: data.name || '',
+      biography: data.biography || '',
+      birthday: data.birthday || null,
+      profile: data.profile_path || null,
+      knownFor: data.known_for_department || '',
+    };
+  }
+
+  async function personCredits(personId) {
+    const data = await get(`/person/${personId}/combined_credits`, {});
+    const seen = new Set();
+    const out = [];
+    (data.cast || []).forEach(c => {
+      const type = c.media_type;
+      if (type !== 'movie' && type !== 'tv') return;
+      const r = normalizeSearch(c, type);
+      if (seen.has(r.key)) return;
+      seen.add(r.key);
+      r.character = c.character || '';
+      r._date = c.release_date || c.first_air_date || '';
+      out.push(r);
+    });
+    out.sort((a, b) => (b._date || '').localeCompare(a._date || ''));
+    return out.slice(0, 30);
   }
 
   async function genres(type) {
@@ -240,5 +270,6 @@
     poster, backdrop, profile,
     searchMulti, trending, details, seasonEpisodes, testKey,
     watchProviders, recommendations, genres, discover, collection,
+    personDetails, personCredits,
   };
 })();
