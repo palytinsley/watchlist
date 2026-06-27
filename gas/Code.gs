@@ -24,7 +24,7 @@ function doGet(e) {
     const payload = e && e.parameter && e.parameter.payload;
     if (payload) {
       // Requires redeployment after any change to this file
-      const lock = LockService.scriptLock();
+      const lock = LockService.getScriptLock();
       lock.waitLock(15000);
       try {
         const parsed = JSON.parse(decodeURIComponent(payload));
@@ -46,7 +46,7 @@ function doGet(e) {
 }
 
 function doPost(e) {
-  const lock = LockService.scriptLock();
+  const lock = LockService.getScriptLock();
   lock.waitLock(15000);
   try {
     const payload = JSON.parse(e.postData.contents);
