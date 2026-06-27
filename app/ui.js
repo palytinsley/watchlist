@@ -68,17 +68,26 @@
     return Object.values(it.seasons || {}).reduce((a, s) => a + s.watched.length, 0);
   }
 
+  function _parseDate(iso) {
+    if (!iso) return new Date(NaN);
+    if (typeof iso === 'number' || /^\d{10,}$/.test(String(iso))) return new Date(Number(iso));
+    return new Date(String(iso).includes('T') ? iso : iso + 'T00:00:00');
+  }
+
   function prettyDate(iso) {
     if (!iso) return '';
-    const d = new Date(iso + 'T00:00:00');
+    const d = _parseDate(iso);
+    if (isNaN(d.getTime())) return '';
     return d.toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' });
   }
   function monthLabel(iso) {
-    const d = new Date(iso + 'T00:00:00');
+    const d = _parseDate(iso);
+    if (isNaN(d.getTime())) return 'Unknown';
     return d.toLocaleDateString('en', { month: 'long', year: 'numeric' });
   }
   function dayNum(iso) {
-    const d = new Date(iso + 'T00:00:00');
+    const d = _parseDate(iso);
+    if (isNaN(d.getTime())) return '';
     return d.getDate();
   }
 

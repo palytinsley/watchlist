@@ -125,8 +125,8 @@
       : '';
     if (crewFact || facts.length) html += `<div class="facts">${crewFact}${facts.map(f => `<span class="fact">${U.esc(f)}</span>`).join('')}</div>`;
 
-    // in lists
-    if (stored && stored.lists.length) {
+    // in lists — always show the assignment control for library items
+    if (stored) {
       const chips = stored.lists.map(id => S.getList(id)).filter(Boolean)
         .map(l => `<span class="listchip"><span class="listchip__dot" style="background:${l.color}"></span>${U.esc(l.name)}</span>`).join('');
       html += `<div class="label" style="padding:0;margin:20px 0 8px">In your lists</div><div class="detail__inlists">${chips}<button class="btn btn--sm btn--dashed" data-action="add-open" data-key="${key}">${U.ti('plus')} List</button></div>`;
@@ -458,6 +458,7 @@
       return;
     }
     const items = [
+      { icon: 'bookmark', label: 'Add to list…', onClick: () => openAddSheet(key) },
       { icon: 'player-play-filled', label: it.status === 'watching' ? 'Mark not watching' : 'Mark watching', onClick: () => { S.setStatus(key, it.status === 'watching' ? 'want' : 'watching'); App().render(); U.toast('Updated', 'check'); } },
       { icon: 'check', label: it.status === 'watched' ? 'Mark unwatched' : 'Mark watched', onClick: () => { S.setStatus(key, it.status === 'watched' ? 'want' : 'watched'); App().render(); U.toast('Updated', 'check'); } },
     ];
@@ -465,7 +466,6 @@
       items.push({ icon: 'star-filled', label: 'Rate…', onClick: () => openRateSheet(key) });
     }
     items.push(
-      { icon: 'bookmark', label: 'Add to list…', onClick: () => openAddSheet(key) },
       { icon: 'trash', label: 'Remove from library', danger: true, onClick: () => { S.removeItem(key); App().render(); U.toast('Removed', 'trash'); } },
     );
     U.openMenu(x, y, items);
