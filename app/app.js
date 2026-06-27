@@ -1088,6 +1088,7 @@
   // ── drag reorder (manage) — pointer-based so it works on desktop + touch ──
   let dragEl = null, dragPlaceholder = null, dragPointerId = null;
   let dragStartY = 0, dragMoving = false;
+  let _swipeStartX = 0, _swipeStartY = 0, _swipeTracking = false;
 
   // Suppress native HTML5 drag on manage rows; pointer events drive reordering.
   document.addEventListener('dragstart', (e) => { if (e.target.closest('.mrow')) e.preventDefault(); });
@@ -1212,6 +1213,30 @@
       }).catch(() => {});
     }
   }
+
+  // ── swipe-from-left-edge → back (overlay views only) ──────────────────────
+  document.addEventListener('touchstart', (e) => {
+    if (e.touches[0].clientX <= 28) {
+      _swipeStartX = e.touches[0].clientX;
+      _swipeStartY = e.touches[0].clientY;
+      _swipeTracking = true;
+    } else {
+      _swipeTracking = false;
+    }
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    if (!_swipeTracking) return;
+    const deltaX = e.touches[0].clientX - _swipeStartX;
+    const deltaY = Math.abs(e.touches[0].clientY - _swipeStartY);
+    if (deltaY > deltaX * 1.5) _swipeTracking = false;
+  }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    if (_swipeTracking) {
+      const deltaX = e.changedTouches[0].clientX - _swipeStartX;
+      if (deltaX > 60 && App.state.stack.length > 0) App.back();
+    }
+    _swipeTracking = false;
+  });
 
   App.setTab = setTab; App.push = push; App.back = back; App.render = render;
   App.openKeySheet = openKeySheet; App.handleApiError = handleApiError;
