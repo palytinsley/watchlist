@@ -163,26 +163,27 @@
     const providers = det.providers;
     let body = '';
     if (providers) {
-      body += providerGroup('Subscription', providers.flatrate);
-      body += providerGroup('Rent', providers.rent);
-      body += providerGroup('Buy', providers.buy);
+      body += providerGroup('Subscription', providers.flatrate, providers.link);
+      body += providerGroup('Rent', providers.rent, providers.link);
+      body += providerGroup('Buy', providers.buy, providers.link);
     }
     if (!body) body = `<div class="muted" style="font-size:13px;margin-top:8px">Not currently streaming</div>`;
     return `<div class="label" style="padding:0;margin:22px 0 4px">${U.ti('tv-2')} Where to Watch</div>${body}`;
   }
 
-  function providerGroup(label, providers) {
+  function providerGroup(label, providers, link) {
     if (!providers || !providers.length) return '';
     return `<div class="provider-group__label">${U.esc(label)}</div>
-      <div class="providers">${providers.map(providerHTML).join('')}</div>`;
+      <div class="providers">${providers.map(p => providerHTML(p, link)).join('')}</div>`;
   }
 
-  function providerHTML(p) {
+  function providerHTML(p, link) {
     const logo = p.logo ? `https://image.tmdb.org/t/p/w92${p.logo}` : '';
-    return `<div class="provider">
-      ${logo ? `<img class="provider__logo" src="${logo}" alt="">` : `<div class="provider__logo"></div>`}
-      <div class="provider__name">${U.esc(p.name)}</div>
-    </div>`;
+    const inner = `${logo ? `<img class="provider__logo" src="${logo}" alt="">` : `<div class="provider__logo"></div>`}
+      <div class="provider__name">${U.esc(p.name)}</div>`;
+    return link
+      ? `<a class="provider" href="${U.esc(link)}" target="_blank" rel="noopener" aria-label="Watch on ${U.esc(p.name)}">${inner}</a>`
+      : `<div class="provider">${inner}</div>`;
   }
 
   function recsSection(det) {
@@ -579,18 +580,25 @@
   function handleAction(a, D, t, e) {
     switch (a) {
       case 'set-status': {
-        const it = getOrCreateItem(D.key);
-        if (it && it.status === D.status) {
-          const hadLists = it.lists && it.lists.length;
+        const existing = S.getItem(D.key);
+        // Toggle off only when the item is already in the library with this
+        // exact status. A brand-new item defaults to 'want', so without this
+        // guard a first "Want" tap would create then immediately clear it.
+        if (existing && existing.status === D.status) {
+          const hadLists = existing.lists && existing.lists.length;
           S.clearStatus(D.key);
           if (!hadLists) { App().back(); break; }
           App().render();
           U.toast('Cleared', 'check');
           break;
         }
+        const isNew = !existing;
+        getOrCreateItem(D.key);
         S.setStatus(D.key, D.status);
         App().render();
         U.toast(U.STATUS[D.status].label, U.STATUS[D.status].icon);
+        // First time this title enters the library — let the user pick a list.
+        if (isNew) openAddSheet(D.key);
         break;
       }
       case 'rate': S.setUserRating(D.key, +D.n); App().render(); break;

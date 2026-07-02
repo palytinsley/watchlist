@@ -158,6 +158,7 @@
       logo: p.logo_path || null,
     }));
     const providers = {
+      link: us.link || null,
       flatrate: normalizeProviders(us.flatrate),
       rent: normalizeProviders(us.rent),
       buy: normalizeProviders(us.buy),
