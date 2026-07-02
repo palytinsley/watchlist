@@ -337,8 +337,8 @@ img { display: block; }
 }
 .watchedbar__left { font-size: 13px; color: var(--text-dim); }
 .watchedbar__left b { color: var(--text); font-weight: 600; }
-.stars { display: inline-flex; gap: 3px; }
-.stars .star { font-size: 17px; color: var(--surface-3); cursor: pointer; display: inline-flex; }
+.stars { display: inline-flex; gap: 6px; }
+.stars .star { font-size: 23px; color: var(--surface-3); cursor: pointer; display: inline-flex; padding: 2px; }
 .stars .star.on { color: var(--star); }
 
 .detail__overview { font-size: 14px; line-height: 1.55; color: var(--text-dim); margin-top: 16px; }
